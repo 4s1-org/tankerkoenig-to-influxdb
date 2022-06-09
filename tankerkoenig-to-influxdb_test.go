@@ -9,10 +9,12 @@ func Test_dummy(t *testing.T) {
 	}
 }
 
-func Test_parseLine(t *testing.T) {
-	result := 3
-	if result != 3 {
-		t.Error("incorrect result: expect 3, got", result)
+func Test_convertAndFilterLine(t *testing.T) {
+	stationIds := []string{"e5215cb1-30d3-4480-9ea1-07381cd0a492"}
+	line := []string{"2022-02-04 08:15:07+01", "e5215cb1-30d3-4480-9ea1-07381cd0a492", "1.609", "1.769", "1.709", "0", "1", "1"}
+	result := convertAndFilterLine(line, stationIds)
+	if len(result) != 1 {
+		t.Error("incorrect result: expect 1, got", len(result))
 	}
 }
 

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"log"
 	"os"
 )
 
@@ -18,6 +21,17 @@ type ConfigurationStation struct {
 
 type Configuration struct {
 	Stations []ConfigurationStation `json:"stations"`
+}
+
+type CsvRow struct {
+	Timestamp    string
+	Id           string
+	Diesel       string
+	E5           string
+	E10          string
+	DieselChange string
+	E5Change     string
+	E10Change    string
 }
 
 func main() {
@@ -65,6 +79,35 @@ func loadConfigurationFile(configFileName string) (*Configuration, error) {
 	}
 
 	return &configuration, nil
+}
+
+func parseCsvFile(filename string) {
+	srcFile, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer srcFile.Close()
+
+	csvReader := csv.NewReader(srcFile)
+
+	for {
+		row, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var stationIds []string
+
+		convertAndFilterLine(row, stationIds)
+	}
+}
+
+func convertAndFilterLine(row []string, stationIds []string) []CsvRow {
+	var result []CsvRow
+	return result
 }
 
 // func parseFile(date time.Time, c *Configuration) {
