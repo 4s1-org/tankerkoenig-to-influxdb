@@ -13,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
 )
 
 type ConfigurationStation struct {
@@ -22,8 +25,17 @@ type ConfigurationStation struct {
 	Street string `json:"street"`
 }
 
+type ConfigurationInfluxDb struct {
+	ServerUrl   string `json:"serverUrl"`
+	Token       string `json:"token"`
+	Bucket      string `json:"bucket"`
+	Org         string `json:"org"`
+	Measurement string `json:"measurement"`
+}
+
 type Configuration struct {
 	Stations []ConfigurationStation `json:"stations"`
+	InfluxDb ConfigurationInfluxDb  `json:"influxDb"`
 }
 
 type Row struct {
@@ -56,9 +68,15 @@ func main() {
 		panic(err)
 	}
 
+	// create new client with default option for server url authenticate by token
+	client := influxdb2.NewClient(config.InfluxDb.ServerUrl, config.InfluxDb.Token)
+	// user blocking write client for writes to desired bucket
+	writeAPI := client.WriteAPIBlocking(config.InfluxDb.Org, config.InfluxDb.Bucket)
+	defer client.Close()
+
 	for _, filename := range sourceFiles {
 		fmt.Println(filename)
-		doIt(config, filename)
+		doIt(config, filename, writeAPI)
 	}
 }
 
@@ -85,7 +103,7 @@ func loadConfigurationFile(configFileName string) (*Configuration, error) {
 	return &configuration, nil
 }
 
-func doIt(config *Configuration, filename string) {
+func doIt(config *Configuration, filename string, writeAPI api.WriteAPIBlocking) {
 	srcFile, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -119,6 +137,13 @@ func doIt(config *Configuration, filename string) {
 					Station:      station,
 				}
 				fmt.Println(detail.Timestamp)
+
+				p = influxdb2.NewPointWithMeasurement(config.InfluxDb.Measurement).
+					AddTag("unit", "temperature").
+					AddField("avg", 23.2).
+					AddField("max", 45).
+					SetTime(time.Now())
+				writeAPI.WritePoint(context.Background(), p)
 			}
 		}
 	}
