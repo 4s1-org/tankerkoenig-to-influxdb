@@ -11,7 +11,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/influxdata/influxdb-client-go/v2"
@@ -39,14 +38,14 @@ type Configuration struct {
 }
 
 type Row struct {
-	Timestamp    int64
+	Timestamp    time.Time
 	Id           string
-	Diesel       int // in Cent
-	E5           int // in Cent
-	E10          int // in Cent
-	DieselChange bool
-	E5Change     bool
-	E10Change    bool
+	Diesel       float64
+	E5           float64
+	E10          float64
+	DieselChange string
+	E5Change     string
+	E10Change    string
 	Station      ConfigurationStation
 }
 
@@ -60,8 +59,6 @@ func main() {
 	sourceFiles := flag.Args()
 	fmt.Printf("Tail: %+q\n", sourceFiles)
 
-	fmt.Println(configFileName)
-
 	// Load configuration
 	config, err := loadConfigurationFile(configFileName)
 	if err != nil {
@@ -69,15 +66,20 @@ func main() {
 	}
 
 	// create new client with default option for server url authenticate by token
-	client := influxdb2.NewClient(config.InfluxDb.ServerUrl, config.InfluxDb.Token)
+	client := influxdb2.NewClientWithOptions(
+		config.InfluxDb.ServerUrl,
+		config.InfluxDb.Token,
+		influxdb2.DefaultOptions().SetBatchSize(20))
 	// user blocking write client for writes to desired bucket
-	writeAPI := client.WriteAPIBlocking(config.InfluxDb.Org, config.InfluxDb.Bucket)
-	defer client.Close()
+	writeAPI := client.WriteAPI(config.InfluxDb.Org, config.InfluxDb.Bucket)
 
 	for _, filename := range sourceFiles {
 		fmt.Println(filename)
 		doIt(config, filename, writeAPI)
 	}
+
+	writeAPI.Flush()
+	client.Close()
 }
 
 func loadConfigurationFile(configFileName string) (*Configuration, error) {
@@ -103,7 +105,7 @@ func loadConfigurationFile(configFileName string) (*Configuration, error) {
 	return &configuration, nil
 }
 
-func doIt(config *Configuration, filename string, writeAPI api.WriteAPIBlocking) {
+func doIt(config *Configuration, filename string, writeAPI api.WriteAPI) {
 	srcFile, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -131,162 +133,66 @@ func doIt(config *Configuration, filename string, writeAPI api.WriteAPIBlocking)
 					Diesel:       convertCurrency(row[2]),
 					E5:           convertCurrency(row[3]),
 					E10:          convertCurrency(row[4]),
-					DieselChange: row[5] == "1",
-					E5Change:     row[6] == "1",
-					E10Change:    row[7] == "1",
+					DieselChange: row[5],
+					E5Change:     row[6],
+					E10Change:    row[7],
 					Station:      station,
 				}
-				fmt.Println(detail.Timestamp)
 
-				p = influxdb2.NewPointWithMeasurement(config.InfluxDb.Measurement).
-					AddTag("unit", "temperature").
-					AddField("avg", 23.2).
-					AddField("max", 45).
-					SetTime(time.Now())
-				writeAPI.WritePoint(context.Background(), p)
+				point := influxdb2.NewPointWithMeasurement(config.InfluxDb.Measurement)
+				shouldWrite := false
+
+				// 0=keine Änderung, 1=Änderung, 2=Entfernt, 3=Neu
+
+				if detail.DieselChange == "1" || detail.DieselChange == "3" {
+					point.AddField("Diesel", detail.Diesel)
+					shouldWrite = true
+				} else if detail.DieselChange == "2" {
+					point.AddField("Diesel", nil)
+					shouldWrite = true
+				}
+
+				if detail.E5Change == "1" || detail.E5Change == "3" {
+					point.AddField("E5", detail.E5)
+					shouldWrite = true
+				} else if detail.E5Change == "2" {
+					point.AddField("E5", nil)
+					shouldWrite = true
+				}
+
+				if detail.E10Change == "1" || detail.E10Change == "3" {
+					point.AddField("E10", detail.E10)
+					shouldWrite = true
+				} else if detail.E10Change == "2" {
+					point.AddField("E10", nil)
+					shouldWrite = true
+				}
+
+				if shouldWrite {
+					point.
+						AddTag("Brand", detail.Station.Brand).
+						AddTag("City", detail.Station.City).
+						AddTag("Street", detail.Station.Street).
+						SetTime(detail.Timestamp)
+					writeAPI.WritePoint(point)
+				}
 			}
 		}
 	}
 }
 
-func convertDate(value string) int64 {
+func convertDate(value string) time.Time {
 	timestamp, err := time.Parse(time.RFC3339, value[0:10]+"T"+value[11:22]+":00")
 	if err != nil {
 		log.Fatal(err)
 	}
-	return timestamp.UTC().Unix()
+	return timestamp
 }
 
-func convertCurrency(value string) int {
-	centStr := strings.Replace(value, ".", "", 1)
-	cent, err := strconv.Atoi(centStr)
+func convertCurrency(value string) float64 {
+	result, err := strconv.ParseFloat(value, 32)
 	if err != nil {
 		panic(err)
 	}
-	return cent
+	return result
 }
-
-// func parseFile(date time.Time, c *Configuration) {
-// 	year := fmt.Sprintf("%04d", date.Year())
-// 	month := fmt.Sprintf("%02d", date.Month())
-// 	day := fmt.Sprintf("%02d", date.Day())
-
-// 	fmt.Printf("%s-%s-%s", year, month, day)
-// 	fmt.Println()
-
-// 	srcPath := filepath.Join(c.TankerkoenigDataFolder, "prices", year, month)
-// 	srcFilename := fmt.Sprintf("%s-%s-%s-prices.csv", year, month, day)
-// 	srcFile2 := filepath.Join(srcPath, srcFilename)
-
-// 	if _, err := os.Stat(srcFile2); errors.Is(err, os.ErrNotExist) {
-// 		fmt.Println("Sourcefile \"" + srcFile2 + "\" does not exists.")
-// 		return
-// 	}
-
-// 	destPath := filepath.Join(c.CsvDataFolder, year, month)
-// 	destFilename := fmt.Sprintf("%s-%s-%s.csv", year, month, day)
-// 	destFilenameInfluxDb := fmt.Sprintf("%s-%s-%s-influxdb.txt", year, month, day)
-// 	destFile2 := filepath.Join(destPath, destFilename)
-// 	destFile2InfluxDb := filepath.Join(destPath, destFilenameInfluxDb)
-
-// 	srcFile, err := os.Open(srcFile2)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer srcFile.Close()
-
-// 	err2 := os.MkdirAll(destPath, os.ModePerm)
-// 	if err2 != nil {
-// 		log.Fatal(err2)
-// 	}
-
-// 	destFile, err := os.Create(destFile2)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer destFile.Close()
-
-// 	destFileInfluxDb, err := os.Create(destFile2InfluxDb)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer destFileInfluxDb.Close()
-
-// 	csvReader := csv.NewReader(srcFile)
-// 	csvWriter := csv.NewWriter(destFile)
-// 	defer csvWriter.Flush()
-// 	txtWriter := bufio.NewWriter(destFileInfluxDb)
-// 	defer txtWriter.Flush()
-// 	firstRow := true
-
-// 	for {
-// 		row, err := csvReader.Read()
-// 		if err == io.EOF {
-// 			break
-// 		}
-// 		if err != nil {
-// 			log.Fatal(err)
-// 		}
-
-// 		if firstRow {
-// 			header := []string{"date", "brand", "city", "street", "fueltype", "price"}
-// 			csvWriter.Write(header)
-// 			firstRow = false
-// 			continue
-// 		}
-
-// 		timestampParsed, err := time.Parse(time.RFC3339, row[0][0:10]+"T"+row[0][11:22]+":00")
-// 		if err != nil {
-// 			log.Fatal(err)
-// 		}
-// 		timestampString := timestampParsed.Format(time.RFC3339)
-// 		timestampUnix := timestampParsed.UTC().Unix()
-// 		uuid := row[1]
-
-// 		// ToDo: Das geht besser in Go
-// 		for i := 0; i < len(c.Stations); i++ {
-// 			station := c.Stations[i]
-// 			if uuid == station.Id {
-// 				parseLine(csvWriter, txtWriter, row, timestampString, timestampUnix, station)
-// 			}
-// 		}
-// 	}
-
-// 	// ToDo: Add Brennpaste
-// }
-
-// func parseLine(csvWriter *csv.Writer, txtWriter *bufio.Writer, row []string, timestampString string, timestampUnix int64, station Station) {
-// 	diesel := row[2]
-// 	e5 := row[3]
-// 	e10 := row[4]
-// 	dieselchange := row[5]
-// 	e5change := row[6]
-// 	e10change := row[7]
-
-// 	details := []string{timestampString, station.Brand, station.City, station.Street}
-
-// 	// 0=keine Änderung, 1=Änderung, 2=Entfernt, 3=Neu
-// 	// ToDo -1 und 2 beachten
-
-// 	// Hint: Manchmal ist bei einer Änderung (1) der Preis -0.001.
-// 	// Keine Ahnung warum, aber die Preise werden ignoriert.
-
-// 	if dieselchange == "1" && diesel[0] != '-' {
-// 		csvWriter.Write(append(details, "Diesel", diesel))
-// 		// ToDo Das geht besser
-// 		txtWriter.WriteString("kraftstoffpreise,marke=" + strings.Replace(station.Brand, " ", "\\ ", -1) + ",ort=" + strings.Replace(station.City, " ", "\\ ", -1) + ",strasse=" + strings.Replace(station.Street, " ", "\\ ", -1) + ",")
-// 		txtWriter.WriteString("sorte=Diesel preis=" + diesel + " " + strconv.FormatInt(timestampUnix, 10) + "\n")
-// 	}
-// 	if e5change == "1" && e5[0] != '-' {
-// 		csvWriter.Write(append(details, "E5", e5))
-// 		// ToDo Das geht besser
-// 		txtWriter.WriteString("kraftstoffpreise,marke=" + strings.Replace(station.Brand, " ", "\\ ", -1) + ",ort=" + strings.Replace(station.City, " ", "\\ ", -1) + ",strasse=" + strings.Replace(station.Street, " ", "\\ ", -1) + ",")
-// 		txtWriter.WriteString("sorte=E5 preis=" + e5 + " " + strconv.FormatInt(timestampUnix, 10) + "\n")
-// 	}
-// 	if e10change == "1" && e10[0] != '-' {
-// 		csvWriter.Write(append(details, "E10", e10))
-// 		// ToDo Das geht besser
-// 		txtWriter.WriteString("kraftstoffpreise,marke=" + strings.Replace(station.Brand, " ", "\\ ", -1) + ",ort=" + strings.Replace(station.City, " ", "\\ ", -1) + ",strasse=" + strings.Replace(station.Street, " ", "\\ ", -1) + ",")
-// 		txtWriter.WriteString("sorte=E10 preis=" + e10 + " " + strconv.FormatInt(timestampUnix, 10) + "\n")
-// 	}
-// }
