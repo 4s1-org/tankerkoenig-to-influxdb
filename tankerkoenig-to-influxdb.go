@@ -10,6 +10,9 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type ConfigurationStation struct {
@@ -23,15 +26,16 @@ type Configuration struct {
 	Stations []ConfigurationStation `json:"stations"`
 }
 
-type CsvRow struct {
-	Timestamp    string
+type Row struct {
+	Timestamp    int64
 	Id           string
-	Diesel       string
-	E5           string
-	E10          string
-	DieselChange string
-	E5Change     string
-	E10Change    string
+	Diesel       int // in Cent
+	E5           int // in Cent
+	E10          int // in Cent
+	DieselChange bool
+	E5Change     bool
+	E10Change    bool
+	Station      ConfigurationStation
 }
 
 func main() {
@@ -52,9 +56,9 @@ func main() {
 		panic(err)
 	}
 
-	for i := 0; i < len(config.Stations); i++ {
-		station := config.Stations[i]
-		fmt.Println(station.Id)
+	for _, filename := range sourceFiles {
+		fmt.Println(filename)
+		doIt(config, filename)
 	}
 }
 
@@ -81,7 +85,7 @@ func loadConfigurationFile(configFileName string) (*Configuration, error) {
 	return &configuration, nil
 }
 
-func parseCsvFile(filename string) {
+func doIt(config *Configuration, filename string) {
 	srcFile, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -99,15 +103,42 @@ func parseCsvFile(filename string) {
 			log.Fatal(err)
 		}
 
-		var stationIds []string
+		stationId := row[1]
 
-		convertAndFilterLine(row, stationIds)
+		for _, station := range config.Stations {
+			if station.Id == stationId {
+				detail := Row{
+					Timestamp:    convertDate(row[0]),
+					Id:           row[1],
+					Diesel:       convertCurrency(row[2]),
+					E5:           convertCurrency(row[3]),
+					E10:          convertCurrency(row[4]),
+					DieselChange: row[5] == "1",
+					E5Change:     row[6] == "1",
+					E10Change:    row[7] == "1",
+					Station:      station,
+				}
+				fmt.Println(detail.Timestamp)
+			}
+		}
 	}
 }
 
-func convertAndFilterLine(row []string, stationIds []string) []CsvRow {
-	var result []CsvRow
-	return result
+func convertDate(value string) int64 {
+	timestamp, err := time.Parse(time.RFC3339, value[0:10]+"T"+value[11:22]+":00")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return timestamp.UTC().Unix()
+}
+
+func convertCurrency(value string) int {
+	centStr := strings.Replace(value, ".", "", 1)
+	cent, err := strconv.Atoi(centStr)
+	if err != nil {
+		panic(err)
+	}
+	return cent
 }
 
 // func parseFile(date time.Time, c *Configuration) {
