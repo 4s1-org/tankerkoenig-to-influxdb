@@ -57,7 +57,6 @@ func main() {
 	flag.StringVar(&configFileName, "c", "", "configuration file")
 	flag.Parse()
 	sourceFiles := flag.Args()
-	fmt.Printf("Tail: %+q\n", sourceFiles)
 
 	// Load configuration
 	config, err := loadConfigurationFile(configFileName)
