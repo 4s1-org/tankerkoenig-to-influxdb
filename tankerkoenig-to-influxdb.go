@@ -136,8 +136,6 @@ func doIt(config *Configuration, filename string, writeAPI api.WriteAPI) {
 					Station:      station,
 				}
 
-				fmt.Println(row)
-
 				point := influxdb2.NewPointWithMeasurement(config.InfluxDB.Measurement)
 
 				// 0=keine Änderung, 1=Änderung, 2=Entfernt, 3=Neu
