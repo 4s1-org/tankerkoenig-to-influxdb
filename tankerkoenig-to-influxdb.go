@@ -50,8 +50,6 @@ type Row struct {
 }
 
 func main() {
-	fmt.Println("--- Hello World ---")
-
 	// Program parameters
 	var configFileName string
 	flag.StringVar(&configFileName, "c", "", "configuration file")
