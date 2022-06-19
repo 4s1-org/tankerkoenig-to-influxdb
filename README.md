@@ -1,4 +1,4 @@
-# Tankerkoenig to InfluxDb
+# Tankerkoenig to InfluxDB
 
 ## Build
 
@@ -12,7 +12,7 @@ Create a configuration file and save it to `config.json`.
 
 ```json
 {
-  "influxDb": {
+  "influxDB": {
     "serverUrl": "https://...:8086",
     "token": "...",
     "bucket": "...",
