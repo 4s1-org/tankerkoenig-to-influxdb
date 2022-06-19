@@ -170,9 +170,9 @@ func doIt(config *Configuration, filename string, writeAPI api.WriteAPI) {
 
 				if shouldWrite {
 					point.
-						AddTag("Brand", detail.Station.Brand).
-						AddTag("City", detail.Station.City).
-						AddTag("Street", detail.Station.Street).
+						AddTag("Marke", detail.Station.Brand).
+						AddTag("Stadt", detail.Station.City).
+						AddTag("Strasse", detail.Station.Street).
 						SetTime(detail.Timestamp)
 					writeAPI.WritePoint(point)
 				}
