@@ -12,6 +12,6 @@
       }
     },
     "go.formatTool": "gofmt",
-    "window.title": "tankerkoenig-to-influxdb"
+    "window.title": "Tankerkoenig"
   }
 }
