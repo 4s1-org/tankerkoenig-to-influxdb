@@ -136,43 +136,21 @@ func doIt(config *Configuration, filename string, writeAPI api.WriteAPI) {
 					Station:      station,
 				}
 
+				fmt.Println(row)
+
 				point := influxdb2.NewPointWithMeasurement(config.InfluxDB.Measurement)
-				shouldWrite := false
 
 				// 0=keine Änderung, 1=Änderung, 2=Entfernt, 3=Neu
 
-				if detail.DieselChange == "1" || detail.DieselChange == "3" {
-					point.AddField("Diesel", detail.Diesel)
-					shouldWrite = true
-				} else if detail.DieselChange == "2" {
-					point.AddField("Diesel", nil)
-					shouldWrite = true
-				}
-
-				if detail.E5Change == "1" || detail.E5Change == "3" {
-					point.AddField("E5", detail.E5)
-					shouldWrite = true
-				} else if detail.E5Change == "2" {
-					point.AddField("E5", nil)
-					shouldWrite = true
-				}
-
-				if detail.E10Change == "1" || detail.E10Change == "3" {
-					point.AddField("E10", detail.E10)
-					shouldWrite = true
-				} else if detail.E10Change == "2" {
-					point.AddField("E10", nil)
-					shouldWrite = true
-				}
-
-				if shouldWrite {
-					point.
-						AddTag("Marke", detail.Station.Brand).
-						AddTag("Stadt", detail.Station.City).
-						AddTag("Strasse", detail.Station.Street).
-						SetTime(detail.Timestamp)
-					writeAPI.WritePoint(point)
-				}
+				point.
+					AddField("Diesel [EUR]", detail.Diesel).
+					AddField("E5 [EUR]", detail.E5).
+					AddField("E10 [EUR]", detail.E10).
+					AddTag("Marke", detail.Station.Brand).
+					AddTag("Stadt", detail.Station.City).
+					AddTag("Strasse", detail.Station.Street).
+					SetTime(detail.Timestamp)
+				writeAPI.WritePoint(point)
 			}
 		}
 	}
